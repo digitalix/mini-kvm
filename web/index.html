@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>mini-kvm-test</title>
+</head>
+<body>
+<video id="remoteVideo" width="800" height="600" autoplay playsinline></video>
+
+<script src="https://cdn.jsdelivr.net/npm/@medooze/whip-whep-js"></script>
+<script>
+    async function startViewing() {
+        const pc = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
+
+        pc.addTransceiver("audio");
+        pc.addTransceiver("video");
+
+        pc.ontrack = (event) => {
+            console.log("Received track:", event.track.kind);
+            if (event.track.kind === "video") {
+                document.getElementById("remoteVideo").srcObject = event.streams[0];
+            }
+        };
+
+        const whep = new WHEPClient();
+        const url = "https://your-whep-server.com/whep/endpoint";
+        const token = "your-auth-token";
+
+        whep.view(pc, url, token);
+    }
+
+    startViewing().catch(err => console.error("Error:", err));
+</script>
+</body>
+</html>
