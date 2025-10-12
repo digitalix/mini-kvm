@@ -13,11 +13,7 @@ RUN apt-get update && \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
     gstreamer1.0-tools \
-    gstreamer1.0-x \
     gstreamer1.0-alsa \
-    gstreamer1.0-gl \
-    gstreamer1.0-gtk3 \
-    gstreamer1.0-qt5 \
     gstreamer1.0-pulseaudio \
     pkg-config \
     gcc \
@@ -26,8 +22,9 @@ RUN apt-get update && \
     wget
 
 ARG GO_VER=1.25.2
-RUN wget --no-check-certificate https://dl.google.com/go/go${GO_VER}.linux-arm64.tar.gz && \
-    tar -xvf go${GO_VER}.linux-arm64.tar.gz && rm -r go${GO_VER}.linux-arm64.tar.gz && \
+ARG GO_ARCH="arm64"
+RUN wget --no-check-certificate https://dl.google.com/go/go${GO_VER}.linux-${GO_ARCH}.tar.gz && \
+    tar -xvf go${GO_VER}.linux-${GO_ARCH}.tar.gz && rm -r go${GO_VER}.linux-${GO_ARCH}.tar.gz && \
     mv go /usr/local
 
 ENV PATH=/usr/local/go/bin:$PATH
