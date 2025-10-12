@@ -1,16 +1,33 @@
 package pkg
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"mini-kvm/pkg/gstreamer"
+	"net/http"
+	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/go-gst/go-gst/gst"
 	"github.com/pion/webrtc/v4/pkg/media"
 )
 
-func Start() error {
+var httpServer = &http.Server{
+	Addr:         ":8080",
+	ReadTimeout:  10 * time.Second,
+	WriteTimeout: 10 * time.Second,
+	IdleTimeout:  60 * time.Second,
+}
+
+func Init() {
+
+}
+
+func Run() error {
 	inputChan := make(chan *gst.Buffer, 30)
-	outputChan := make(chan *media.Sample, 30)
+	outputChan := make(chan *media.Sample, 100)
 	captureSettings := gstreamer.V4L2CaptureSettings{
 		VideoCaptureSettings: gstreamer.VideoCaptureSettings{
 			Width:     1920,
@@ -49,6 +66,21 @@ func Start() error {
 	}
 
 	videoEncoder.Start()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	server, err := NewServer(ctx, outputChan)
+
+	httpHandler := HttpHandler{
+		server: server,
+	}
+	http.HandleFunc("/connect", httpHandler.whepHandler)
+
+	go func() {
+		log.Printf("Server starting on %s\n", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal().Err(err).Msg("failed to start server")
+		}
+	}()
 
 	for {
 		sample := <-outputChan

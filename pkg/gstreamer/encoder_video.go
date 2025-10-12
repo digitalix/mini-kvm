@@ -283,7 +283,7 @@ func (e *VideoEncoder) Start() {
 
 			flags := buffer.GetFlags()
 			isKeyframe := (flags&gst.BufferFlagHeader) != 0 || !((flags & gst.BufferFlagDeltaUnit) != 0)
-			if (e.encoderSettings.Name == "med" || e.encoderSettings.Name == "high") && isKeyframe {
+			if isKeyframe {
 				e.logger.Println(">>>>>>>> kf generated", e.encoderSettings.Name)
 			}
 
