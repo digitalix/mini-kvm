@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"mini-kvm/pkg/concurrents"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -182,6 +183,7 @@ func (e *gstBase) RemoveOutput(encoder Encoder) {
 }
 
 func (e *gstBase) sendBuffer(buffer *gst.Buffer) {
+	defer buffer.Unref()
 	for encoder := range e.encoders.Iterate {
 		if !encoder.IsRunning() {
 			continue
@@ -192,7 +194,7 @@ func (e *gstBase) sendBuffer(buffer *gst.Buffer) {
 			return
 		}
 
-		encoder.InputChan() <- buffer.Copy().Ref()
+		encoder.InputChan() <- buffer.Copy()
 	}
 }
 
@@ -319,8 +321,10 @@ func (e *gstBase) appSinkPuller() {
 			e.logger.Println("first frame generated")
 		}
 
-		e.sendBuffer(buffer.Ref())
-		buffer.Unref()
+		runtime.SetFinalizer(buffer, nil)
+		runtime.SetFinalizer(sample, nil)
+		e.sendBuffer(buffer)
+		sample.Unref()
 	}
 }
 

@@ -4,6 +4,7 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -251,26 +252,15 @@ func (e *VideoEncoder) Start() {
 			}
 		}()
 		firstFrame := true
-		lastFrameTime := time.Now()
-		for {
-			sample := e.appSink.PullSample()
-			if e.appSink.IsEOS() || sample == nil {
-				if !e.isStopping.Load() {
-					e.logger.Println("pull err", e.appSink.IsEOS(), e.appSink.GetCurrentState(), sample == nil)
-				}
-				break
-			}
-
-			now := time.Now()
-			diff := now.Sub(lastFrameTime).Milliseconds()
-			lastFrameTime = now
-			_ = diff
-
+		onSample := func(sample *gst.Sample) {
+			defer sample.Unref()
 			buffer := sample.GetBuffer()
 			if buffer == nil {
-				break
+				return
 			}
 
+			runtime.SetFinalizer(buffer, nil)
+			defer buffer.Unref()
 			if firstFrame {
 				firstFrame = false
 				e.producedFirstFrame.Store(true)
@@ -283,7 +273,7 @@ func (e *VideoEncoder) Start() {
 
 			if len(e.outputChan) == cap(e.outputChan) {
 				e.logger.Warn().Msg("videoEncoder videoOutputChan is full")
-				continue
+				return
 			}
 
 			flags := buffer.GetFlags()
@@ -293,7 +283,7 @@ func (e *VideoEncoder) Start() {
 			}
 
 			if e.isStopping.Load() {
-				continue
+				return
 			}
 
 			outputChan := e.outputChan
@@ -302,6 +292,18 @@ func (e *VideoEncoder) Start() {
 			}
 
 			outputChan <- &media.Sample{Data: buffer.Bytes(), Timestamp: time.Unix(int64(buffer.PresentationTimestamp()), 0), Duration: duration, Metadata: SampleMetadata{IsKeyFrame: isKeyframe, Source: e.encoderSettings.Name, MediaType: MediaTypeVideo}}
+		}
+		for {
+			sample := e.appSink.PullSample()
+			if e.appSink.IsEOS() || sample == nil {
+				if !e.isStopping.Load() {
+					e.logger.Println("pull err", e.appSink.IsEOS(), e.appSink.GetCurrentState(), sample == nil)
+				}
+				break
+			}
+
+			runtime.SetFinalizer(sample, nil)
+			onSample(sample)
 		}
 	}()
 
@@ -322,6 +324,7 @@ func (e *VideoEncoder) Start() {
 					return
 				}
 
+				runtime.SetFinalizer(buffer, nil)
 				e.appSrc.PushBuffer(buffer)
 				buffer.Unref()
 				break
