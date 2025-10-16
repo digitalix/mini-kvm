@@ -221,7 +221,12 @@ func (e *gstBase) gstBusLoop() {
 	defer e.cleanUp()
 	bus := e.pipeline.GetPipelineBus()
 	for {
-		msg := bus.BlockPopMessage()
+		msg := bus.Pop()
+		if msg == nil {
+			time.Sleep(time.Millisecond * 10)
+			continue
+		}
+
 		switch msg.Type() {
 		case gst.MessageStateChanged:
 			if !strings.HasPrefix(msg.Source(), "pipeline") {

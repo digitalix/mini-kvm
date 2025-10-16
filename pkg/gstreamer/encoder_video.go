@@ -205,7 +205,12 @@ func (e *VideoEncoder) Start() {
 		defer e.logger.Warn().Msg("videoEncoder bus exit")
 		bus := e.pipeline.GetPipelineBus()
 		for {
-			msg := bus.BlockPopMessage()
+			msg := bus.Pop()
+			if msg == nil {
+				time.Sleep(time.Millisecond * 10)
+				continue
+			}
+
 			switch msg.Type() {
 			case gst.MessageStateChanged:
 				if !strings.HasPrefix(msg.Source(), "pipeline") {
