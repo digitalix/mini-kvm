@@ -2,28 +2,94 @@
 <html>
 <head>
     <title>mini-kvm-test</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-<video id="remoteVideo" width="800" height="600" autoplay playsinline></video>
+<video style="background-color: black; cursor: none;" id="remoteVideo" width="100%" height="100%" autoplay playsinline muted></video>
 
-<script src="https://cdn.jsdelivr.net/npm/@medooze/whip-whep-js"></script>
+<script src="assets/js/whep.js"></script>
 <script>
     async function startViewing() {
         const pc = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
+        const datachannelMap = new Map();
+        const keyMap = new Map();
+        const videoElement = document.getElementById("remoteVideo");
+        videoElement.onplay = () => {
+            console.log("Video started playing");
+        };
+
+        document.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            if (keyMap.has(e.code)) {
+                return
+            }
+
+            keyMap.set(e.code, true);
+            datachannelMap.get("keyboard").send("{\"key_code\":\"" + e.code + "\",\"is_down\": true}");
+        });
+
+        document.addEventListener('keyup', (e) => {
+            e.preventDefault();
+            keyMap.delete(e.code);
+            datachannelMap.get("keyboard").send("{\"key_code\":\"" + e.code + "\",\"is_down\": false}");
+            console.log("keyup" + e.code);
+            console.log(e);
+        });
+
+        videoElement.addEventListener('mousemove', (e) => {
+            const rect = videoElement.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const videoWidth = videoElement.videoWidth;
+            const videoHeight = videoElement.videoHeight;
+            const elementWidth = rect.width;
+            const elementHeight = rect.height;
+            const videoAspect = videoWidth / videoHeight;
+            const elementAspect = elementWidth / elementHeight;
+            let renderWidth, renderHeight, offsetX, offsetY;
+            if (elementAspect > videoAspect) {
+                renderHeight = elementHeight;
+                renderWidth = videoAspect * renderHeight;
+                offsetX = (elementWidth - renderWidth) / 2;
+                offsetY = 0;
+            } else {
+                renderWidth = elementWidth;
+                renderHeight = renderWidth / videoAspect;
+                offsetX = 0;
+                offsetY = (elementHeight - renderHeight) / 2;
+            }
+
+            const videoX = ((mouseX - offsetX) / renderWidth) * videoWidth;
+            const videoY = ((mouseY - offsetY) / renderHeight) * videoHeight;
+            if (videoX >= 0 && videoX <= videoWidth && videoY >= 0 && videoY <= videoHeight) {
+                datachannelMap.get("mouse").send("{\"x\":" + Math.round(videoX) + ",\"y\":" + Math.round(videoY)+"}");
+            }
+        });
 
         pc.addTransceiver("audio");
         pc.addTransceiver("video");
-
+        datachannelMap.set("control", pc.createDataChannel("control", { ordered: true }));
+        datachannelMap.set("mouse", pc.createDataChannel("mouse", { ordered: false }));
+        datachannelMap.set("keyboard", pc.createDataChannel("keyboard", { ordered: true }));
         pc.ontrack = (event) => {
             console.log("Received track:", event.track.kind);
             if (event.track.kind === "video") {
-                document.getElementById("remoteVideo").srcObject = event.streams[0];
+                console.log("set");
+                console.log(event);
+                videoElement.srcObject = event.streams[0];
             }
         };
 
         const whep = new WHEPClient();
-        const url = "https://your-whep-server.com/whep/endpoint";
-        const token = "your-auth-token";
+        const url = "http://192.168.1.89:8080/connect";
+        const token = "";
 
         whep.view(pc, url, token);
     }
