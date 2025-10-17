@@ -21,11 +21,7 @@ var httpServer = &http.Server{
 	IdleTimeout:  60 * time.Second,
 }
 
-func Init() {
-
-}
-
-func Run() error {
+func Run(ctx context.Context) error {
 	inputChan := make(chan *gst.Buffer, 30)
 	outputChan := make(chan *media.Sample, 100)
 	captureSettings := gstreamer.V4L2CaptureSettings{
@@ -66,8 +62,6 @@ func Run() error {
 	}
 
 	videoEncoder.Start()
-
-	ctx, cancel := context.WithCancel(context.Background())
 	server, err := NewServer(ctx, outputChan)
 
 	httpHandler := HttpHandler{
@@ -83,8 +77,15 @@ func Run() error {
 	}()
 
 	for {
-		sample := <-outputChan
-		fmt.Println("sample!", sample.Metadata)
+		select {
+		case <-ctx.Done():
+			fmt.Println("ctx done")
+			return nil
+		case sample := <-outputChan:
+			if err := server.videoTrack.WriteSample(*sample); err != nil {
+				log.Error().Err(err).Msg("failed to write sample")
+			}
+		}
 	}
 
 }
