@@ -1,0 +1,5 @@
+Package: mkvm
+Version: 1.0.0
+Architecture: arm64
+Maintainer: Patryk Rogalski<patryk@rogalski.dev>
+Homepage: https://github.com/digitalix/mini-kvm
