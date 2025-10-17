@@ -56,7 +56,7 @@ func NewServer(ctx context.Context, mediaChan chan *media.Sample) (*Server, erro
 		return nil, fmt.Errorf("failed to create audio track: %w", err)
 	}
 
-	keyboardController := NewKeyboardController(ctx)
+	keyboardController := NewKeyboardController(ctx, "/dev/hidg0")
 	mouseController := NewMouseController(ctx)
 
 	server := &Server{
@@ -135,52 +135,37 @@ func configureWebRTCApi() (api *webrtc.API, err error) {
 	return webrtc.NewAPI(webrtc.WithMediaEngine(media), webrtc.WithInterceptorRegistry(ir)), nil
 }
 
-func (s *Server) CreateClient(offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+func (s *Server) CreateClient(offer webrtc.SessionDescription) (string, *webrtc.SessionDescription, error) {
 	peerConnection, err := s.webrtcAPI.NewPeerConnection(peerConnectionConfiguration)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %w", err)
+		return "", nil, fmt.Errorf("failed to create client: %w", err)
 	}
 
 	for _, track := range []webrtc.TrackLocal{s.videoTrack, s.audioTrack} {
 		sender, err := peerConnection.AddTrack(track)
 		if err != nil {
-			return nil, fmt.Errorf("failed to add track: %w", err)
+			return "", nil, fmt.Errorf("failed to add track: %w", err)
 		}
 
 		go rtcpDummyReader(sender)
 	}
 
 	{
-		_, err = peerConnection.CreateDataChannel("control", &webrtc.DataChannelInit{
-			Ordered: toPtr(true),
-		})
+		_, err = peerConnection.CreateDataChannel("dummy", nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create data channel for control: %w", err)
-		}
-
-		_, err = peerConnection.CreateDataChannel("mouse", &webrtc.DataChannelInit{
-			Ordered: toPtr(false),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create data channel for mouse: %w", err)
-		}
-
-		_, err = peerConnection.CreateDataChannel("keyboard", &webrtc.DataChannelInit{
-			Ordered: toPtr(true),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to create data channel for keyboard: %w", err)
+			return "", nil, fmt.Errorf("failed to create data channel for control: %w", err)
 		}
 	}
 
 	id := uuid.NewString()
 	logger := log.With().Str("id", id).Logger()
-	client := NewClient(id, peerConnection, logger, s.keyboardController.EventChan(), s.mouseController.EventChan())
+	client := NewClient(id, peerConnection, logger, s.mouseController.EventChan(), s.keyboardController.EventChan())
+	s.clients.Set(id, client)
 	peerConnection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		logger.Info().Str("state", state.String()).Msg("connection state changed")
 		switch state {
 		case webrtc.PeerConnectionStateConnected:
-			s.clients.Set(id, client)
+
 		case webrtc.PeerConnectionStateDisconnected, webrtc.PeerConnectionStateFailed:
 			if err := client.Close(); err != nil {
 				logger.Error().Err(err).Msg("failed to close client")
@@ -191,21 +176,21 @@ func (s *Server) CreateClient(offer webrtc.SessionDescription) (*webrtc.SessionD
 	})
 
 	if err = peerConnection.SetRemoteDescription(offer); err != nil {
-		return nil, fmt.Errorf("failed to set remote desc: %w", err)
+		return "", nil, fmt.Errorf("failed to set remote desc: %w", err)
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
 	answer, err := peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create answer: %w", err)
+		return "", nil, fmt.Errorf("failed to create answer: %w", err)
 	}
 
 	if err = peerConnection.SetLocalDescription(answer); err != nil {
-		return nil, fmt.Errorf("failed to set local desc: %w", err)
+		return "", nil, fmt.Errorf("failed to set local desc: %w", err)
 	}
 
 	<-gatherComplete
-	return &answer, nil
+	return client.Id(), &answer, nil
 }
 
 func rtcpDummyReader(sender *webrtc.RTPSender) {
