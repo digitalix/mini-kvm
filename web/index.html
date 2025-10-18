@@ -25,6 +25,25 @@
             console.log("Video started playing");
         };
 
+        document.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            console.log("wheel");
+            console.log(e);
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            datachannelMap.get("mouse").send("{\"action\":1, \"b\":" + e.button + ", \"d\":true}");
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            if(e.button === 2){
+                datachannelMap.get("mouse").send("{\"action\":1, \"b\":2, \"d\":true}");
+            }
+            datachannelMap.get("mouse").send("{\"action\":1, \"b\":" + e.button + ", \"d\":false}");
+        });
+
         document.addEventListener('keydown', (e) => {
             e.preventDefault();
             if (keyMap.has(e.code)) {
@@ -69,7 +88,7 @@
             const videoX = ((mouseX - offsetX) / renderWidth) * videoWidth;
             const videoY = ((mouseY - offsetY) / renderHeight) * videoHeight;
             if (videoX >= 0 && videoX <= videoWidth && videoY >= 0 && videoY <= videoHeight) {
-                datachannelMap.get("mouse").send("{\"x\":" + Math.round(videoX) + ",\"y\":" + Math.round(videoY)+"}");
+                datachannelMap.get("mouse").send("{\"action\":0, \"x\":" + Math.round(videoX) + ",\"y\":" + Math.round(videoY)+"}");
             }
         });
 
