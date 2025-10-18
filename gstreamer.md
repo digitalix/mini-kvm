@@ -63,6 +63,9 @@ SUBSYSTEM=="dma_heap", KERNEL=="system", GROUP="video", MODE="0660"
 SUBSYSTEM=="dma_heap", RUN+="/bin/chgrp video /dev/dma_heap/%k", RUN+="/bin/chmod 0660 /dev/dma_heap/%k"
 EOF
 
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
 sudo usermod -a -G video $(whoami)
 sudo reboot
 ```
