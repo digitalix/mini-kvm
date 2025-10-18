@@ -57,7 +57,7 @@ func NewServer(ctx context.Context, mediaChan chan *media.Sample) (*Server, erro
 	}
 
 	keyboardController := NewKeyboardController(ctx, "/dev/hidg0")
-	mouseController := NewMouseController(ctx)
+	mouseController := NewMouseController(ctx, "/dev/hidg1", 1920, 1080)
 
 	server := &Server{
 		webrtcAPI:          api,

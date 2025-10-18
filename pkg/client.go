@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync/atomic"
 
@@ -18,13 +19,13 @@ type Client struct {
 	keyboardChannel *webrtc.DataChannel
 	controlChannel  *webrtc.DataChannel
 
-	mouseChan chan KeyPress
-	keyChan   chan MouseLocation
+	mouseChan chan MouseEvent
+	keyChan   chan KeyPressEvent
 
 	isClosed atomic.Bool
 }
 
-func NewClient(id string, connection *webrtc.PeerConnection, logger zerolog.Logger, mouseChan chan KeyPress, keyChan chan MouseLocation) *Client {
+func NewClient(id string, connection *webrtc.PeerConnection, logger zerolog.Logger, mouseChan chan MouseEvent, keyChan chan KeyPressEvent) *Client {
 	c := &Client{
 		id:         id,
 		connection: connection,
@@ -34,7 +35,7 @@ func NewClient(id string, connection *webrtc.PeerConnection, logger zerolog.Logg
 	}
 
 	c.connection.OnDataChannel(func(dc *webrtc.DataChannel) {
-		logger.Println("data channel", dc.Label())
+		logger.Println("on data channel", dc.Label())
 		switch dc.Label() {
 		case "mouse":
 			c.mouseChannel = dc
@@ -43,6 +44,9 @@ func NewClient(id string, connection *webrtc.PeerConnection, logger zerolog.Logg
 		case "control":
 			c.controlChannel = dc
 		}
+		dc.OnOpen(func() {
+			logger.Println("on open data channel", dc.Label())
+		})
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 			c.onDataChannelMessage(dc, msg)
 		})
@@ -56,6 +60,25 @@ func (c *Client) Id() string {
 }
 
 func (c *Client) onDataChannelMessage(dc *webrtc.DataChannel, message webrtc.DataChannelMessage) {
+	switch dc.Label() {
+	case "mouse":
+		var m MouseEvent
+		if err := json.Unmarshal(message.Data, &m); err != nil {
+			c.logger.Error().Err(err).Msg("failed to unmarshal mouse location")
+			break
+		}
+
+		c.mouseChan <- m
+		break
+	case "keyboard":
+		var k KeyPressEvent
+		if err := json.Unmarshal(message.Data, &k); err != nil {
+			c.logger.Error().Err(err).Msg("failed to unmarshal key press")
+		}
+
+		c.keyChan <- k
+		break
+	}
 	c.logger.Println("onDataChannelMessage", dc.Label())
 }
 
